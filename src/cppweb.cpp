@@ -20,7 +20,7 @@ namespace cppweb {
         post_routes[path] = handler;
     }
 
-    void Server::listen(std::string, int port) {
+    void Server::listen(int port) {
         std::cout << "cppweb server listening on " <<  << port << "...\n";
         
         while (true) {

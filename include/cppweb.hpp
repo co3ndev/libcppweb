@@ -29,7 +29,7 @@ namespace cppweb {
         void get(const std::string& path, RouteHandler handler);
         void post(const std::string& path, RouteHandler handler);
 
-        void listen(std::string host, int port);
+        void listen(int port);
 
     private:
         std::map<std::string, RouteHandler> get_routes;
