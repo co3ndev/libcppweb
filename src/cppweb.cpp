@@ -51,6 +51,28 @@ namespace cppweb {
         get_routes[path] = handler;
     }
 
+    void Server::get(const std::string& path, const std::string& file_path) {
+        get_routes[path] = [file_path](const Request& req, Response& res) {
+            std::filesystem::path fp = file_path;
+            if (std::filesystem::exists(fp) && std::filesystem::is_regular_file(fp)) {
+                std::ifstream file(fp, std::ios::binary);
+                if (file) {
+                    std::ostringstream oss;
+                    oss << file.rdbuf();
+                    res.body = oss.str();
+                    res.content_type = get_mime_type(fp.extension().string());
+                    res.status_code = 200;
+                    return;
+                }
+            }
+
+            // Fallback if file doesn't exist
+            res.status_code = 404;
+            res.body = "404 Not Found";
+            res.content_type = "text/plain";
+        };
+    }
+
     void Server::post(const std::string& path, RouteHandler handler) {
         post_routes[path] = handler;
     }

@@ -26,10 +26,12 @@ namespace cppweb {
     public:
         Server();
         ~Server();
-        
+
         void serve_static(const std::string& prefix, const std::string& dir_path);
 
         void get(const std::string& path, RouteHandler handler);
+        void get(const std::string& path, const std::string& file_path);
+
         void post(const std::string& path, RouteHandler handler);
 
         void listen(int port);
@@ -38,7 +40,7 @@ namespace cppweb {
 	    	std::map<std::string, std::string> static_routes;
         std::map<std::string, RouteHandler> get_routes;
         std::map<std::string, RouteHandler> post_routes;
-		
+
         void handle_client(int client_fd);
         Request parse_request(const std::string& raw_data);
         void route_request(const Request& req, Response& res);

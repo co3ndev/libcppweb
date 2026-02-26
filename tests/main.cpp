@@ -1,5 +1,4 @@
 #include "../include/cppweb.hpp"
-#include <iostream>
 
 int main() {
     cppweb::Server app;
@@ -9,6 +8,9 @@ int main() {
         res.body = "Hello from libcppweb!";
         res.content_type = "text/plain";
     });
+
+    // Define a specific file route
+    app.get("/test", "/home/michael/Projects/libcweb/tests/example.html");
 
     // Define a JSON API route
     app.get("/api/status", [](const cppweb::Request& req, cppweb::Response& res) {
