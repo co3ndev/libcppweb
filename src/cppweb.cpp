@@ -75,9 +75,14 @@ namespace cppweb {
 
     void Server::handle_client(int client_fd) {
         char buffer[2048] = {0};
-        read(client_fd, buffer, 2048);
+        ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer));
+        if (bytes_read <= 0) {
+            close(client_fd);
+            return;
+        }
 
-        Request req = parse_request(buffer);
+        // Pass the exact length to support varied inner data correctly
+        Request req = parse_request(std::string(buffer, bytes_read));
         Response res;
 
         route_request(req, res);
@@ -138,6 +143,11 @@ namespace cppweb {
                 req.headers[key] = value;
             }
         }
+        
+        // The remaining data in the stream is the body
+        std::ostringstream body_stream;
+        body_stream << request_stream.rdbuf();
+        req.body = body_stream.str();
 
         return req;
     }
