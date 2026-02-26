@@ -77,10 +77,34 @@ namespace cppweb {
             std::istringstream request_stream(buffer);
             std::string method, path, http_version;
             request_stream >> method >> path >> http_version;
-
+			
+			// Consume the trailing newline from the first line
+            std::string line;
+            std::getline(request_stream, line);
+			
             // Prepare our request and response objects
             Request req{method, path, "", {}};
             Response res;
+            
+            // Header Parsing
+            while (std::getline(request_stream, line) && line != "\r" && !line.empty()) {
+                size_t colon_pos = line.find(':');
+                if (colon_pos != std::string::npos) {
+                    std::string key = line.substr(0, colon_pos);
+                    
+                    // Skip leading whitespace in the value
+                    size_t value_start = line.find_first_not_of(" \t", colon_pos + 1);
+                    std::string value = "";
+                    if (value_start != std::string::npos) {
+                        value = line.substr(value_start);
+                        // Clean up trailing '\r' typical in HTTP headers
+                        if (!value.empty() && value.back() == '\r') {
+                            value.pop_back();
+                        }
+                    }
+                    req.headers[key] = value;
+                }
+            }
 
             // Route matching!
             bool route_found = false;
