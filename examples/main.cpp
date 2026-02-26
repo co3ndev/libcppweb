@@ -15,12 +15,14 @@ int main() {
         res.body = R"({"status": "ok", "version": "0.1.0"})";
         res.content_type = "application/json";
     });
-    
+
     // Define a POST route to test body extraction
     app.post("/api/echo", [](const cppweb::Request& req, cppweb::Response& res) {
         res.body = "You sent:\n" + req.body;
         res.content_type = "text/plain";
     });
+
+    app.serve_static("/static", "/home/michael/Projects/libcweb/examples/");
 
     // Start server on port 8080
     app.listen(8080);

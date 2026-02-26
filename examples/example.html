@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+    <head>
+        <title>Example</title>
+    </head>
+    <body>
+        <h1>Hello, World!</h1>
+        <button onclick="postTest()">Click me!</button>
+        <script>
+            function postTest() {
+                console.log("Post test");
+                fetch("/api/echo", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ message: "Hello, World!" }),
+                })
+                    .then((response) => response.json())
+                    .then((data) => console.log(data))
+                    .catch((error) => console.error(error));
+            }
+        </script>
+    </body>
+</html>
