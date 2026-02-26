@@ -18,8 +18,8 @@ int main() {
 
     // Define a POST route to test body extraction
     app.post("/api/echo", [](const cppweb::Request& req, cppweb::Response& res) {
-        res.body = "You sent:\n" + req.body;
-        res.content_type = "text/plain";
+        res.body = R"({"status": "ok"})";
+        res.content_type = "application/json";
     });
 
     app.serve_static("/static", "/home/michael/Projects/libcweb/examples/");
