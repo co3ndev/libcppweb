@@ -4,6 +4,8 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <sstream>
+#include <fstream>
+#include <filesystem>
 
 namespace {
     std::string get_status_message(int code) {
@@ -16,7 +18,7 @@ namespace {
             default:  return "Unknown";
         }
     }
-    
+
     std::string get_mime_type(const std::string& ext) {
         if (ext == ".html" || ext == ".htm") return "text/html";
         if (ext == ".css") return "text/css";
@@ -40,7 +42,7 @@ namespace cppweb {
     Server::~Server() {
         // Cleanup
     }
-    
+
     void Server::serve_static(const std::string& prefix, const std::string& dir_path) {
         static_routes[prefix] = dir_path;
     }
@@ -60,7 +62,7 @@ namespace cppweb {
             std::cerr << "Failed to create socket.\n";
             return;
         }
-        
+
         // Bind socket to the port
         struct sockaddr_in address;
         address.sin_family = AF_INET;
@@ -71,7 +73,7 @@ namespace cppweb {
             std::cerr << "Failed to bind to port " << port << ".\n";
             return;
         }
-        
+
         // Start listening
         if (::listen(server_fd, 10) < 0) {
             std::cerr << "Failed to listen.\n";
@@ -79,7 +81,7 @@ namespace cppweb {
         } else {
             std::cout << "Started listening on " << port << ".\n";
         }
-        
+
         // Server loop
         while (true) {
             int addrlen = sizeof(address);
@@ -112,20 +114,20 @@ namespace cppweb {
         std::istringstream request_stream(raw_data);
         std::string method, raw_path, http_version;
         request_stream >> method >> raw_path >> http_version;
-        
+
         // Consume the trailing newline from the first line
         std::string line;
         std::getline(request_stream, line);
-        
+
         // Extract query parameters from raw_path
         std::string path = raw_path;
         std::map<std::string, std::string> query_params;
         size_t query_pos = raw_path.find('?');
-        
+
         if (query_pos != std::string::npos) {
             path = raw_path.substr(0, query_pos); // Base path without the query string
             std::string query_string = raw_path.substr(query_pos + 1);
-            
+
             // Split query string by '&'
             std::istringstream query_stream(query_string);
             std::string key_value;
@@ -138,15 +140,15 @@ namespace cppweb {
                 }
             }
         }
-        
+
         Request req{method, path, "", {}, query_params};
-        
+
         // Header Parsing
         while (std::getline(request_stream, line) && line != "\r" && !line.empty()) {
             size_t colon_pos = line.find(':');
             if (colon_pos != std::string::npos) {
                 std::string key = line.substr(0, colon_pos);
-                
+
                 // Skip leading whitespace in the value
                 size_t value_start = line.find_first_not_of(" \t", colon_pos + 1);
                 std::string value = "";
@@ -160,7 +162,7 @@ namespace cppweb {
                 req.headers[key] = value;
             }
         }
-        
+
         // The remaining data in the stream is the body
         std::ostringstream body_stream;
         body_stream << request_stream.rdbuf();
@@ -178,17 +180,17 @@ namespace cppweb {
             post_routes[req.path](req, res);
             route_found = true;
         }
-        
+
         // Check static routes if no API route matched
         if (!route_found && req.method == "GET") {
             for (const auto& [prefix, dir_path] : static_routes) {
                 // Check if the route path starts with the requested prefix
                 if (req.path.find(prefix) == 0) {
                     std::string sub_path = req.path.substr(prefix.length());
-                    
+
                     // Basic security: prevent directory traversal attacks
                     if (sub_path.find("..") != std::string::npos) break;
-                    
+
                     // Remove leading slash so std::filesystem builds it as relative to dir_path
                     if (!sub_path.empty() && sub_path[0] == '/') sub_path = sub_path.substr(1);
 
