@@ -22,7 +22,8 @@ int main() {
         res.content_type = "application/json";
     });
 
-    app.serve_static("/static", "/home/michael/Projects/tests/examples/");
+    // Test for static routes: visit /static
+    app.serve_static("/static", "/home/michael/Projects/libcweb/tests/");
 
     // Start server on port 8080
     app.listen(8080);
