@@ -11,6 +11,7 @@ namespace cppweb {
         std::string path;
         std::string body;
         std::map<std::string, std::string> headers;
+        std::map<std::string, std::string> query_params;
     };
 
     struct Response {
