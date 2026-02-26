@@ -20,7 +20,7 @@ namespace cppweb {
     }
 
     void Server::listen(int port) {
-        std::cout << "cppweb server listening on " <<  << port << "...\n";
+        std::cout << "cppweb server listening on " << port << "...\n";
         
         while (true) {
             // TODO: Implement actual socket binding, listening, and accept loop.
