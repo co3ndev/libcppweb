@@ -1,7 +1,7 @@
 #include "../include/cppweb.hpp"
 
 int main() {
-    cppweb::Server app;
+    cppweb::Server app(4);
 
     // Define a GET route
     app.get("/", [](const cppweb::Request& req, cppweb::Response& res) {
@@ -20,12 +20,22 @@ int main() {
 
     // Define a POST route to test body extraction
     app.post("/api/echo", [](const cppweb::Request& req, cppweb::Response& res) {
-        res.body = R"({"status": "ok"})";
+        res.body = R"({"received": ")" + req.body + R"("})";
         res.content_type = "application/json";
     });
 
-    // Test for static routes: visit /static
-    app.serve_static("/static", "/home/michael/Projects/libcweb/tests/");
+    // Define a PUT route
+    app.put("/api/update", [](const cppweb::Request& req, cppweb::Response& res) {
+        res.status_code = 200;
+        res.body = R"({"status": "updated"})";
+        res.content_type = "application/json";
+    });
+
+    // Define a DELETE route
+    app.del("/api/delete/:id", [](const cppweb::Request& req, cppweb::Response& res) {
+        res.status_code = 204;
+        res.body = "";
+    });
 
     // Start server on port 8080
     app.listen(8080);

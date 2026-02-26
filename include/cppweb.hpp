@@ -1,50 +1,18 @@
 #pragma once
 
-#include <string>
-#include <functional>
-#include <map>
+// Include this file to use the libcppweb web server library.
+// For more granular control, you can include specific headers from the cppweb namespace.
 
-namespace cppweb {
+// Core HTTP components
+#include "cppweb/core/request.hpp"
+#include "cppweb/core/response.hpp"
+#include "cppweb/core/server.hpp"
 
-    struct Request {
-        std::string method;
-        std::string path;
-        std::string body;
-        std::map<std::string, std::string> headers;
-        std::map<std::string, std::string> query_params;
-    };
+// Routing
+#include "cppweb/routing/router.hpp"
 
-    struct Response {
-        int status_code = 200;
-        std::string body;
-        std::string content_type = "text/plain";
-    };
+// Threading
+#include "cppweb/threading/thread_pool.hpp"
 
-    using RouteHandler = std::function<void(const Request&, Response&)>;
-
-    class Server {
-    public:
-        Server();
-        ~Server();
-
-        void serve_static(const std::string& prefix, const std::string& dir_path);
-
-        void get(const std::string& path, RouteHandler handler);
-        void get(const std::string& path, const std::string& file_path);
-
-        void post(const std::string& path, RouteHandler handler);
-
-        void listen(int port);
-
-    private:
-	    	std::map<std::string, std::string> static_routes;
-        std::map<std::string, RouteHandler> get_routes;
-        std::map<std::string, RouteHandler> post_routes;
-
-        void handle_client(int client_fd);
-        Request parse_request(const std::string& raw_data);
-        void route_request(const Request& req, Response& res);
-        void send_response(int client_fd, const Response& res);
-    };
-
-} // namespace cppweb
+// Utilities
+#include "cppweb/utils/http_utils.hpp"
