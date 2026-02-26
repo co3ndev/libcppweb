@@ -7,8 +7,43 @@
 #include <fstream>
 #include <filesystem>
 #include <sstream>
+#include <stdexcept>
+
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
 
 namespace cppweb {
+
+namespace {
+    class ScopedFD {
+    public:
+        explicit ScopedFD(int fd = -1) : fd_(fd) {}
+        ~ScopedFD() { if (fd_ >= 0) ::close(fd_); }
+
+        // Non-copyable
+        ScopedFD(const ScopedFD&) = delete;
+        ScopedFD& operator=(const ScopedFD&) = delete;
+
+        // Movable
+        ScopedFD(ScopedFD&& other) noexcept : fd_(other.fd_) { other.fd_ = -1; }
+        ScopedFD& operator=(ScopedFD&& other) noexcept {
+            if (this != &other) {
+                if (fd_ >= 0) ::close(fd_);
+                fd_ = other.fd_;
+                other.fd_ = -1;
+            }
+            return *this;
+        }
+
+        int get() const { return fd_; }
+        bool is_valid() const { return fd_ >= 0; }
+        void release() { fd_ = -1; }
+
+    private:
+        int fd_;
+    };
+}
 
 Server::Server(size_t num_threads) {
     thread_pool = std::make_unique<threading::ThreadPool>(num_threads);
@@ -35,7 +70,7 @@ void Server::get(const std::string& path, const std::string& file_path) {
                 return;
             }
         }
-        
+
         res.status_code = 404;
         res.body = "404 Not Found";
         res.content_type = "text/plain";
@@ -55,17 +90,14 @@ void Server::del(const std::string& path, RouteHandler handler) {
 }
 
 void Server::listen(int port) {
-    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd == 0) {
-        std::cerr << "Failed to create socket.\n";
-        return;
+    ScopedFD server_fd(socket(AF_INET, SOCK_STREAM, 0));
+    if (!server_fd.is_valid()) {
+        throw std::runtime_error("Failed to create socket.");
     }
 
     int opt = 1;
-    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        std::cerr << "Failed to set socket options.\n";
-        close(server_fd);
-        return;
+    if (setsockopt(server_fd.get(), SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        throw std::runtime_error("Failed to set socket options.");
     }
 
     struct sockaddr_in address;
@@ -73,52 +105,68 @@ void Server::listen(int port) {
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(port);
 
-    if (bind(server_fd, (struct sockaddr*)&address, sizeof(address)) < 0) {
-        std::cerr << "Failed to bind to port " << port << ".\n";
-        close(server_fd);
-        return;
+    if (bind(server_fd.get(), (struct sockaddr*)&address, sizeof(address)) < 0) {
+        throw std::runtime_error("Failed to bind to port " + std::to_string(port) + ".");
     }
 
-    if (::listen(server_fd, 10) < 0) {
-        std::cerr << "Failed to listen.\n";
-        close(server_fd);
-        return;
+    if (::listen(server_fd.get(), 10) < 0) {
+        throw std::runtime_error("Failed to listen.");
     }
 
     std::cout << "Server listening on port " << port << "...\n";
 
     while (true) {
         int addrlen = sizeof(address);
-        int client_fd = accept(server_fd, (struct sockaddr*)&address, (socklen_t*)&addrlen);
+        int client_fd = accept(server_fd.get(), (struct sockaddr*)&address, (socklen_t*)&addrlen);
         if (client_fd < 0) {
             std::cerr << "Failed to accept connection.\n";
             continue;
         }
 
-        thread_pool->enqueue([this, client_fd] {
-            this->handle_client(client_fd);
-        });
+        try {
+            thread_pool->enqueue([this, client_fd] {
+                this->handle_client(client_fd);
+            });
+        } catch (const std::exception& e) {
+            std::cerr << "Failed to enqueue task: " << e.what() << "\n";
+            ::close(client_fd);
+        }
     }
-
-    close(server_fd);
 }
 
-void Server::handle_client(int client_fd) {
+
+void Server::handle_client(int client_fd_raw) {
+    ScopedFD client_fd(client_fd_raw);
+
     char buffer[8192] = {0};
-    ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
+    ssize_t bytes_read = read(client_fd.get(), buffer, sizeof(buffer) - 1);
     if (bytes_read <= 0) {
-        close(client_fd);
-        return;
+        return; // client_fd gets automatically closed by ScopedFD
     }
 
-    Request req = utils::parse_request(std::string(buffer, bytes_read));
-    Response res;
+    try {
+        Request req = utils::parse_request(std::string(buffer, bytes_read));
+        Response res;
 
-    router->route(req, res);
-    send_response(client_fd, res);
-
-    close(client_fd);
+        router->route(req, res);
+        send_response(client_fd.get(), res);
+    } catch (const std::exception& e) {
+        std::cerr << "Exception in request handling: " << e.what() << "\n";
+        Response res;
+        res.status_code = 500;
+        res.body = "500 Internal Server Error";
+        res.content_type = "text/plain";
+        send_response(client_fd.get(), res);
+    } catch (...) {
+        std::cerr << "Unknown exception in request handling.\n";
+        Response res;
+        res.status_code = 500;
+        res.body = "500 Internal Server Error";
+        res.content_type = "text/plain";
+        send_response(client_fd.get(), res);
+    }
 }
+
 
 void Server::send_response(int client_fd, const Response& res) {
     std::ostringstream response_stream;
@@ -134,7 +182,7 @@ void Server::send_response(int client_fd, const Response& res) {
     response_stream << "\r\n" << res.body;
 
     std::string response_str = response_stream.str();
-    send(client_fd, response_str.c_str(), response_str.length(), 0);
+    send(client_fd, response_str.c_str(), response_str.length(), MSG_NOSIGNAL);
 }
 
 } // namespace cppweb

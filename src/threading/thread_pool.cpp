@@ -1,4 +1,5 @@
 #include "../../include/cppweb/threading/thread_pool.hpp"
+#include <iostream>
 
 namespace cppweb {
 namespace threading {
@@ -40,7 +41,13 @@ void ThreadPool::worker_thread() {
         }
 
         if (task) {
-            task();
+            try {
+                task();
+            } catch (const std::exception& e) {
+                std::cerr << "[ThreadPool] Uncaught exception in task: " << e.what() << "\n";
+            } catch (...) {
+                std::cerr << "[ThreadPool] Unknown uncaught exception in task.\n";
+            }
         }
     }
 }

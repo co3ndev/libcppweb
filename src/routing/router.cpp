@@ -27,25 +27,30 @@ void Router::del(const std::string& path, RouteHandler handler) {
 }
 
 void Router::route(const Request& req, Response& res) const {
-    std::unique_lock<std::mutex> lock(routes_mutex);
-    
+    RouteHandler handler;
     bool route_found = false;
-    
-    if (req.method == "GET" && get_routes.count(req.path)) {
-        get_routes.at(req.path)(req, res);
-        route_found = true;
-    } else if (req.method == "POST" && post_routes.count(req.path)) {
-        post_routes.at(req.path)(req, res);
-        route_found = true;
-    } else if (req.method == "PUT" && put_routes.count(req.path)) {
-        put_routes.at(req.path)(req, res);
-        route_found = true;
-    } else if (req.method == "DELETE" && delete_routes.count(req.path)) {
-        delete_routes.at(req.path)(req, res);
-        route_found = true;
+
+    {
+        std::unique_lock<std::mutex> lock(routes_mutex);
+
+        if (req.method == "GET" && get_routes.count(req.path)) {
+            handler = get_routes.at(req.path);
+            route_found = true;
+        } else if (req.method == "POST" && post_routes.count(req.path)) {
+            handler = post_routes.at(req.path);
+            route_found = true;
+        } else if (req.method == "PUT" && put_routes.count(req.path)) {
+            handler = put_routes.at(req.path);
+            route_found = true;
+        } else if (req.method == "DELETE" && delete_routes.count(req.path)) {
+            handler = delete_routes.at(req.path);
+            route_found = true;
+        }
     }
 
-    if (!route_found) {
+    if (route_found && handler) {
+        handler(req, res); // Execution now happens safely outside the mutex lock
+    } else {
         res.status_code = 404;
         res.body = "404 Not Found";
         res.content_type = "text/plain";
@@ -54,7 +59,7 @@ void Router::route(const Request& req, Response& res) const {
 
 bool Router::has_route(const std::string& method, const std::string& path) const {
     std::unique_lock<std::mutex> lock(routes_mutex);
-    
+
     if (method == "GET") {
         return get_routes.count(path) > 0;
     } else if (method == "POST") {
