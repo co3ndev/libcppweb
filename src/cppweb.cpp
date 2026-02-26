@@ -5,6 +5,19 @@
 #include <unistd.h>
 #include <sstream>
 
+namespace {
+    std::string get_status_message(int code) {
+        switch (code) {
+            case 200: return "OK";
+            case 400: return "Bad Request";
+            case 404: return "Not Found";
+            case 500: return "Internal Server Error";
+            // Add other status codes as needed
+            default:  return "Unknown";
+        }
+    }
+}
+
 namespace cppweb {
 
     Server::Server() {
@@ -88,7 +101,7 @@ namespace cppweb {
 
             // 5. Construct the raw HTTP response
             std::ostringstream response_stream;
-            response_stream << "HTTP/1.1 " << res.status_code << " OK\r\n"
+            response_stream << "HTTP/1.1 " << res.status_code << " " << get_status_message(res.status_code) << "\r\n"
                             << "Content-Type: " << res.content_type << "\r\n"
                             << "Content-Length: " << res.body.length() << "\r\n"
                             << "Connection: close\r\n\r\n"
