@@ -82,6 +82,28 @@ namespace cppweb {
             std::string line;
             std::getline(request_stream, line);
 			
+			// Extract query parameters from raw_path
+            std::string path = raw_path;
+            std::map<std::string, std::string> query_params;
+            size_t query_pos = raw_path.find('?');
+            
+            if (query_pos != std::string::npos) {
+                path = raw_path.substr(0, query_pos); // Base path without the query string
+                std::string query_string = raw_path.substr(query_pos + 1);
+                
+                // Split query string by '&'
+                std::istringstream query_stream(query_string);
+                std::string key_value;
+                while (std::getline(query_stream, key_value, '&')) {
+                    size_t eq_pos = key_value.find('=');
+                    if (eq_pos != std::string::npos) {
+                        query_params[key_value.substr(0, eq_pos)] = key_value.substr(eq_pos + 1);
+                    } else if (!key_value.empty()) {
+                        query_params[key_value] = ""; // Present but has no value
+                    }
+                }
+            }
+			
             // Prepare our request and response objects
             Request req{method, path, "", {}};
             Response res;
