@@ -35,6 +35,11 @@ namespace cppweb {
     private:
         std::map<std::string, RouteHandler> get_routes;
         std::map<std::string, RouteHandler> post_routes;
+
+        void handle_client(int client_fd);
+        Request parse_request(const std::string& raw_data);
+        void route_request(const Request& req, Response& res);
+        void send_response(int client_fd, const Response& res);
     };
 
 } // namespace cppweb
