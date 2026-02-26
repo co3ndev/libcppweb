@@ -16,6 +16,19 @@ namespace {
             default:  return "Unknown";
         }
     }
+    
+    std::string get_mime_type(const std::string& ext) {
+        if (ext == ".html" || ext == ".htm") return "text/html";
+        if (ext == ".css") return "text/css";
+        if (ext == ".js") return "application/javascript";
+        if (ext == ".png") return "image/png";
+        if (ext == ".jpg" || ext == ".jpeg") return "image/jpeg";
+        if (ext == ".gif") return "image/gif";
+        if (ext == ".ico") return "image/x-icon";
+        if (ext == ".json") return "application/json";
+        if (ext == ".txt") return "text/plain";
+        return "application/octet-stream";
+    }
 }
 
 namespace cppweb {
@@ -26,6 +39,10 @@ namespace cppweb {
 
     Server::~Server() {
         // Cleanup
+    }
+    
+    void Server::serve_static(const std::string& prefix, const std::string& dir_path) {
+        static_routes[prefix] = dir_path;
     }
 
     void Server::get(const std::string& path, RouteHandler handler) {
@@ -160,6 +177,37 @@ namespace cppweb {
         } else if (req.method == "POST" && post_routes.count(req.path)) {
             post_routes[req.path](req, res);
             route_found = true;
+        }
+        
+        // Check static routes if no API route matched
+        if (!route_found && req.method == "GET") {
+            for (const auto& [prefix, dir_path] : static_routes) {
+                // Check if the route path starts with the requested prefix
+                if (req.path.find(prefix) == 0) {
+                    std::string sub_path = req.path.substr(prefix.length());
+                    
+                    // Basic security: prevent directory traversal attacks
+                    if (sub_path.find("..") != std::string::npos) break;
+                    
+                    // Remove leading slash so std::filesystem builds it as relative to dir_path
+                    if (!sub_path.empty() && sub_path[0] == '/') sub_path = sub_path.substr(1);
+
+                    std::filesystem::path file_path = std::filesystem::path(dir_path) / sub_path;
+
+                    if (std::filesystem::exists(file_path) && std::filesystem::is_regular_file(file_path)) {
+                        std::ifstream file(file_path, std::ios::binary);
+                        if (file) {
+                            std::ostringstream oss;
+                            oss << file.rdbuf();
+                            res.body = oss.str();
+                            res.content_type = get_mime_type(file_path.extension().string());
+                            res.status_code = 200;
+                            route_found = true;
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         // Fallback for 404 Not Found
