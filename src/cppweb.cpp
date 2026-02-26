@@ -1,5 +1,5 @@
 // src/cppweb.cpp
-#include "cppweb.hpp"
+#include "../include/cppweb.hpp"
 #include <iostream>
 
 namespace cppweb {
