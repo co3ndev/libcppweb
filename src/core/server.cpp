@@ -60,15 +60,11 @@ void Server::get(const std::string& path, const std::string& file_path) {
     router->get(path, [file_path](const Request& req, Response& res) {
         std::filesystem::path fp = file_path;
         if (std::filesystem::exists(fp) && std::filesystem::is_regular_file(fp)) {
-            std::ifstream file(fp, std::ios::binary);
-            if (file) {
-                std::ostringstream oss;
-                oss << file.rdbuf();
-                res.body = oss.str();
-                res.content_type = utils::get_mime_type(fp.extension().string());
-                res.status_code = 200;
-                return;
-            }
+            // Set file path for streaming instead of reading into memory
+            res.file_path = fp.string();
+            res.content_type = utils::get_mime_type(fp.extension().string());
+            res.status_code = 200;
+            return;
         }
 
         res.status_code = 404;
@@ -138,14 +134,50 @@ void Server::listen(int port) {
 void Server::handle_client(int client_fd_raw) {
     ScopedFD client_fd(client_fd_raw);
 
-    char buffer[8192] = {0};
-    ssize_t bytes_read = read(client_fd.get(), buffer, sizeof(buffer) - 1);
+    std::string raw_request;
+    char buffer[8192];
+    ssize_t bytes_read = read(client_fd.get(), buffer, sizeof(buffer));
     if (bytes_read <= 0) {
         return; // client_fd gets automatically closed by ScopedFD
     }
+    raw_request.append(buffer, bytes_read);
+
+    // Look for HTTP headers end to see if we have a body
+    size_t header_end = raw_request.find("\r\n\r\n");
+    if (header_end != std::string::npos) {
+        size_t cl_pos = raw_request.find("Content-Length:");
+        if (cl_pos == std::string::npos) {
+            cl_pos = raw_request.find("content-length:");
+        }
+
+        if (cl_pos != std::string::npos && cl_pos < header_end) {
+            size_t cl_end = raw_request.find("\r\n", cl_pos);
+            if (cl_end != std::string::npos) {
+                try {
+                    std::string cl_str = raw_request.substr(cl_pos + 15, cl_end - cl_pos - 15);
+                    // Trim whitespace
+                    cl_str.erase(0, cl_str.find_first_not_of(" \t"));
+                    cl_str.erase(cl_str.find_last_not_of(" \t") + 1);
+
+                    size_t content_length = std::stoull(cl_str);
+                    size_t body_received = raw_request.length() - (header_end + 4);
+
+                    // Read the rest of the payload
+                    while (body_received < content_length) {
+                        bytes_read = read(client_fd.get(), buffer, sizeof(buffer));
+                        if (bytes_read <= 0) break;
+                        raw_request.append(buffer, bytes_read);
+                        body_received += bytes_read;
+                    }
+                } catch (...) {
+                    // Ignore content-length parsing errors
+                }
+            }
+        }
+    }
 
     try {
-        Request req = utils::parse_request(std::string(buffer, bytes_read));
+        Request req = utils::parse_request(raw_request);
         Response res;
 
         router->route(req, res);
@@ -170,19 +202,57 @@ void Server::handle_client(int client_fd_raw) {
 
 void Server::send_response(int client_fd, const Response& res) {
     std::ostringstream response_stream;
+
+    size_t content_length = res.body.length();
+    if (!res.file_path.empty()) {
+        try {
+            content_length = std::filesystem::file_size(res.file_path);
+        } catch (const std::exception& e) {
+            std::cerr << "Failed to get file size for " << res.file_path << ": " << e.what() << "\n";
+            std::string error_response = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            send(client_fd, error_response.c_str(), error_response.length(), MSG_NOSIGNAL);
+            return;
+        }
+    }
+
     response_stream << "HTTP/1.1 " << res.status_code << " " << utils::get_status_message(res.status_code) << "\r\n"
                     << "Content-Type: " << res.content_type << "\r\n"
-                    << "Content-Length: " << res.body.length() << "\r\n"
+                    << "Content-Length: " << content_length << "\r\n"
                     << "Connection: close\r\n";
 
     for (const auto& [key, value] : res.headers) {
         response_stream << key << ": " << value << "\r\n";
     }
 
-    response_stream << "\r\n" << res.body;
+    response_stream << "\r\n";
 
-    std::string response_str = response_stream.str();
-    send(client_fd, response_str.c_str(), response_str.length(), MSG_NOSIGNAL);
+    if (res.file_path.empty()) {
+        // Send in-memory body
+        response_stream << res.body;
+        std::string response_str = response_stream.str();
+        send(client_fd, response_str.c_str(), response_str.length(), MSG_NOSIGNAL);
+    } else {
+        // Send headers first
+        std::string headers_str = response_stream.str();
+        send(client_fd, headers_str.c_str(), headers_str.length(), MSG_NOSIGNAL);
+
+        // Stream file content
+        std::ifstream file(res.file_path, std::ios::binary);
+        if (file) {
+            char buffer[8192];
+            while (file.read(buffer, sizeof(buffer)) || file.gcount() > 0) {
+                ssize_t bytes_to_send = file.gcount();
+                const char* ptr = buffer;
+                while (bytes_to_send > 0) {
+                    ssize_t sent = send(client_fd, ptr, bytes_to_send, MSG_NOSIGNAL);
+                    if (sent <= 0) return; // Client disconnected or error
+                    ptr += sent;
+                    bytes_to_send -= sent;
+                }
+            }
+        }
+    }
 }
+
 
 } // namespace cppweb

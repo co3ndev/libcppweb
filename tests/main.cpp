@@ -10,7 +10,7 @@ int main() {
     });
 
     // Define a specific file route
-    app.get("/test", "/home/michael/Projects/libcweb/tests/example.html");
+    app.get("/test", "/home/michael/Projects/libcppweb/tests/example.html");
 
     // Define a JSON API route
     app.get("/api/status", [](const cppweb::Request& req, cppweb::Response& res) {
