@@ -1,5 +1,7 @@
 #include "../../include/cppweb/core/server.hpp"
 #include "../../include/cppweb/utils/http_utils.hpp"
+#include "../../include/cppweb/utils/codes.hpp"
+#include "../../include/cppweb/utils/mime_type.hpp"
 #include <iostream>
 #include <sys/socket.h>
 #include <netinet/in.h>
